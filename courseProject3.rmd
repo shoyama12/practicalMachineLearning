@@ -1,0 +1,108 @@
+---
+title: "courseProject3"
+author: "Shogo"
+date: "1/10/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#**Overview**
+
+This analysis corresponds to the Project Assignment for the Practical Machine Learning course of the John Hopkins Data Science Specialization at Coursera. The project uses data from the Weight Lifting Exercises (WLE) Dataset (see http://groupware.les.inf.puc-rio.br/har) According to the WLE website, six participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions, identified as classes A, B, C, D and E. Class A corresponds to a correct execution of the exercise, and the remaining five classes identify common mistakes in this weight lifting exercise. Several sensors were used to collect data about the quality of the exercise execution. The goal of this project is to obtain a prediction algorithm that takes such a set of sensor readings and correctly predicts the corresponding class (A to E).
+
+
+
+#**Load and pre-process the data**
+
+First we will read the training data. We can observe that there are 19622 rows and 160 columns (variables) 
+```{r echo=TRUE} 
+pml_training_data = read.table("data/pml-training.csv",    
+            header = TRUE, sep = ",", 
+            na.strings = c("NA", "#DIV/0!"))
+
+dim(pml_training_data)
+```
+
+Most of the variables (152 out of 160) correspond to sensor readings for one of the four sensors. Those sensor-reading variable names (columns 8 to 159) include one of the following strings to identify the corresponding sensor: 
+_belt   _arm   _dumbbell   _forearm
+
+#**Only include sensor variables**
+
+The first 7 columns do not represent sensor readings, so we can remove these columns.
+```{r echo=TRUE}
+sensorColumns = grep(pattern = "_belt|_arm|_dumbbell|_forearm", names(pml_training_data))
+length(sensorColumns)
+```
+```{r echo=TRUE}
+data = pml_training_data[, c(sensorColumns,160)]
+dim(data)
+```
+
+We must remove variables where most values are NA
+```{r echo=TRUE}
+missingData = is.na(data)
+omitColumns = which(colSums(missingData) > 19000)
+data = data[, -omitColumns]
+dim(data)
+```
+
+This leaves us with 53 variables. Let's check to see there are no missing values
+```{r echo=TRUE}
+table(complete.cases(data))
+```
+
+##**Data Spliting**
+
+We will set the seed to ensure reproducibility, and create a training and test set
+```{r echo=TRUE}
+set.seed(2014)
+library(caret)
+```
+```{r echo=TRUE}
+inTrain <- createDataPartition(y=data$classe, p=0.75, list=FALSE)
+training <- data[inTrain,]
+dim(training)
+```
+```{r echo=TRUE}
+testing <- data[-inTrain,]
+dim(testing)
+```
+
+#**Train the predictor**
+
+We will use the randomForest function (in the randomForest package) to fit the predictor to the training set.
+
+```{r echo=TRUE}
+library(randomForest)
+```
+
+```{r echo=TRUE}
+time1 = proc.time()
+training$classe=factor(training$classe)
+(randForest = randomForest(classe~., data=training, ntree = 500))
+```
+
+```{r echo=TRUE}
+time2 = proc.time()
+(time = time2 - time1)
+```
+
+As the above results show, the resulting predictor has a quite low OOB (out-of-bag) error estimate. The confusion matrix for the training set indicates that the predictor is accurate on that set.
+
+#**Apply Model to Test Sample**
+
+After training the predictor we use it on the testing subsample we constructed before, to get an estimate of its out of sample error.
+```{r echo=TRUE}
+predictionTesting = predict(randForest, newdata = testing)
+```
+
+The error estimate can be obtained with the confusionMatrix function of the caret package:
+```{r echo=TRUE}
+testing$classe=factor(testing$classe)
+confusionMatrix(predictionTesting, testing$classe)
+```
